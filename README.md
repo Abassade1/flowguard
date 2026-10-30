@@ -45,6 +45,18 @@ pytest
 
 ---
 
+## Temporary online hosting (free)
+
+GitHub Pages only serves static files, so it cannot run a Streamlit (Python) app. Two free options that work straight from the GitHub repository:
+
+**GitHub Codespaces (temporary, private by default).** On the repository page choose **Code → Codespaces → Create codespace on main**. The `.devcontainer/` config installs the requirements and starts the app; it opens in a preview tab on port 8501. To let others see it, open the **Ports** tab, right-click port 8501 → **Port visibility → Public**, and share the URL. The codespace stops after inactivity (30 minutes by default) and the link stops working; delete it from github.com/codespaces when finished. Free accounts get a monthly allowance of core-hours.
+
+**Streamlit Community Cloud (stays up, public link).** Sign in at share.streamlit.io with GitHub, choose **Create app**, pick this repository, branch `main`, main file `app.py`, and under **Advanced settings** choose Python 3.13. Delete the app from the dashboard when you no longer need it.
+
+On both, the SQLite database is temporary: projects saved online are lost when the codespace or app restarts. The demo data is synthetic, so do not enter confidential or culturally sensitive information on a public link.
+
+---
+
 ## What you can do
 
 | Page | What it does |
