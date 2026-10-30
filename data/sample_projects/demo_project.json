@@ -1,0 +1,25 @@
+{
+  "name": "Demo Corridor Project (synthetic)",
+  "pipeline_type": "Oil",
+  "description": "Demonstration project for exploring FlowGuard. The two end points are arbitrary coordinates; all constraint layers shown around them are synthetic and do not describe the real landscape.",
+  "start_name": "Demo start point",
+  "start_lat": 53.20,
+  "start_lon": -112.90,
+  "end_name": "Demo end point",
+  "end_lat": 52.55,
+  "end_lon": -111.40,
+  "approx_length_km": 130,
+  "diameter_mm": 610,
+  "capacity": 20000,
+  "capacity_unit": "m³/day",
+  "budget": 450000000,
+  "currency": "CAD",
+  "fx_rate_from_cad": 1.0,
+  "length_unit": "km",
+  "assumptions": [
+    {"assumption": "All GIS constraint layers are synthetic until real data is loaded", "status": "Synthetic", "source": "FlowGuard demo generator"},
+    {"assumption": "Terrain (elevation) is synthetic", "status": "Synthetic", "source": "FlowGuard demo generator"},
+    {"assumption": "Unit construction costs use Phase 1 placeholder rates", "status": "Assumed", "source": "modules/config.py"},
+    {"assumption": "Design capacity 20,000 m³/day", "status": "Assumed", "source": "Demo input"}
+  ]
+}
