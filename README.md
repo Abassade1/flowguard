@@ -3,7 +3,7 @@
 AI-assisted pipeline planning, investment decision-support, environmental assessment support,
 digital twin and operational monitoring for oil, natural gas and water pipelines.
 
-> **Status: all 7 phases complete (version 1.0).** Projects, route planning, cost engine, environmental
+> **Status: all 7 phases complete, plus probabilistic costs (version 1.1).** Projects, route planning, cost engine, environmental
 > screening, engagement records, 3D digital twin, monitoring with explainable rules and optional ML,
 > risk register and investor reports. Still a decision-support prototype: see *Responsible use* below.
 
@@ -51,7 +51,7 @@ pytest
 |---|---|
 | **Executive Overview** | Headline metrics, status strip along the pipeline, top alerts, route snapshot |
 | **Project Setup** | Create / save / reopen / delete projects (local SQLite). Set start & destination by clicking the map or typing coordinates. Diameter, capacity, budget, currency (CAD default, your own exchange rate), km/mi, assumptions register |
-| **Cost Optimizer** | 22 editable cost assumptions (saved with the project), CAPEX / OPEX / lifecycle cost (undiscounted and present value) per route, cost per km, CAPEX vs budget, breakdown by cost group, line-by-line basis of estimate, tornado sensitivity, cumulative cost over the design life, CSV export |
+| **Cost Optimizer** | 22 editable cost assumptions (saved with the project), CAPEX / OPEX / lifecycle cost (undiscounted and present value) per route, cost per km, CAPEX vs budget, breakdown by cost group, line-by-line basis of estimate, tornado sensitivity, **Monte Carlo cost ranges** (P10/P50/P80/P90, S-curves, chance of staying within budget, contingency needed for P80 vs assumed; editable ranges saved with the project), cumulative cost over the design life, CSV export |
 | **Environmental Intelligence** | 11 screening themes per route (wetlands, water & riparian, protected areas, forest, fragmentation, habitat & biodiversity, erosion / landslide / flood proxies, disturbance, restoration) with level, data status and confidence; data gaps shown as *Not assessed*; features crossed or nearby; mitigation ideas for professional review; CSV export |
 | **Indigenous & Community Engagement** | Records of engagement activities, concerns & feedback, commitments, follow-up actions, land-use & traditional-activity considerations (no locations), and project changes; sensitivity levels (Restricted hidden by default, never exported); overdue tracking; route-linked concerns shown on Route Planning as information only |
 | **Route Planning** | Upload a GeoTIFF elevation model (DEM) to replace synthetic terrain. Generated corridors on a map (least-cost paths for 4 strategies + straight-line reference), constraint layers, upload your own GIS layers with source records, elevation profiles, multi-criteria comparison, trade-offs, CSV export |
@@ -73,7 +73,8 @@ the severity. Advanced settings: length, number of sections, time window, noise,
    the synthetic layer for that category and is listed in the data-source register.
 4. Open **Cost Optimizer**. Compare route costs, pick a route to see its basis of estimate, and check
    the tornado chart. Open *Cost assumptions*, raise the steel price, and watch every figure (and the
-   Route Planning scores) update. Save the project to keep your assumptions.
+   Route Planning scores) update. Scroll to *Probabilistic estimate*: compare P50/P80 with the budget and see
+   how much contingency P80 really needs. Save the project to keep your assumptions and ranges.
 5. Open **Environmental Intelligence**. Note that *Wildlife habitat & biodiversity* is **Not assessed**
    (no data), and every other theme says its confidence is *None* because the layers are synthetic.
 6. Save the project, then open **Indigenous & Community Engagement**. Add an activity, then a concern linked
@@ -135,6 +136,7 @@ Flowguide/
 │   ├── routing.py             Least-cost corridor generation (Dijkstra) + route measurement
 │   ├── maps.py                Folium map builders
 │   ├── cost_engine.py         CAPEX / OPEX / lifecycle estimates + sensitivity (editable assumptions)
+│   ├── cost_uncertainty.py    Monte Carlo cost simulation (P-values, implied contingency)
 │   ├── environmental_engine.py  Environmental screening themes, confidence, conflicts, mitigation ideas
 │   ├── social_impact.py       Engagement records (SQLite), redaction, export rules, summaries
 │   ├── route_engine.py        Multi-criteria scoring + trade-off explanations

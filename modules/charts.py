@@ -4,6 +4,7 @@ Charts take DataFrames and return Plotly figures. They contain no Streamlit
 code, so they can be reused in reports (Phase 7) and tested on their own.
 """
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -290,4 +291,32 @@ def risk_matrix_chart(grid: pd.DataFrame, title: str) -> go.Figure:
     ))
     fig.update_layout(**{**BASE_LAYOUT, "hovermode": "closest"}, height=320, title={"text": title, "x": 0},
                       xaxis={"title": "Consequence", "side": "bottom"}, yaxis={"title": "Likelihood"})
+    return fig
+
+
+def s_curve_chart(samples: dict[str, np.ndarray], colors: dict[str, str], currency: str, factor: float = 1.0,
+                  budget: float | None = None) -> go.Figure:
+    """Cumulative probability (S-curve) of simulated CAPEX for each route, in millions."""
+    fig = go.Figure()
+    for name, values in samples.items():
+        x = np.sort(np.asarray(values)) * factor / 1e6
+        y = np.arange(1, len(x) + 1) / len(x)
+        step = max(1, len(x) // 400)  # thin the line for a light chart
+        fig.add_trace(go.Scatter(x=x[::step], y=y[::step], mode="lines", name=name,
+                                 line={"color": colors[name], "width": 2},
+                                 hovertemplate=f"{name}<br>{currency} %{{x:,.0f}} M or less: %{{y:.0%}} of outcomes"
+                                               "<extra></extra>"))
+    for p in (0.5, 0.8):
+        fig.add_hline(y=p, line={"color": REPLAY_COLOR, "width": 1, "dash": "dot"},
+                      annotation_text=f"P{int(p * 100)}", annotation_position="bottom right")
+    if budget:
+        fig.add_vline(x=budget / 1e6, line={"color": THRESHOLD_COLOR, "width": 1.5, "dash": "dash"},
+                      annotation_text="Budget", annotation_position="top")
+    fig.update_layout(**{**BASE_LAYOUT, "hovermode": "closest"}, height=360,
+                      title={"text": f"Probability that CAPEX (before contingency) is at or below a value ({currency} M)",
+                             "x": 0},
+                      xaxis_title=f"{currency} M", yaxis={"title": "Cumulative probability", "tickformat": ".0%",
+                                                          "range": [0, 1.02]},
+                      legend={"orientation": "h", "y": -0.22})
+    _style_axes(fig)
     return fig

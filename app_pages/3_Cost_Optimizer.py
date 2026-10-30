@@ -7,7 +7,9 @@ import streamlit as st
 
 from modules import projects as store
 from modules import ui
+from modules import cost_uncertainty as mc
 from modules.charts import cost_breakdown_chart, cumulative_cost_chart, tornado_chart
+from modules.charts import s_curve_chart as mc_chart
 from modules.config import ESTIMATE_DISCLAIMER
 from modules.cost_engine import (
     ASSUMPTION_GROUPS, SENSITIVITY_METRICS, CostAssumptions, assumption_table, cumulative_cost,
@@ -160,6 +162,77 @@ top = sens.iloc[0]
 st.caption(f"Base {SENSITIVITY_METRICS[metric].lower()}: {store.fmt_money(sens['base'].iloc[0] * fx, cur)}. "
            f"The most influential assumption is **{top['assumption']}**: ±{swing}% moves the result by about "
            f"{store.fmt_money(top['swing'] / 2 * fx, cur)} either way. Firm up the top assumptions first.")
+
+# --- Probabilistic estimate (Monte Carlo) -----------------------------------------------
+st.subheader("Probabilistic estimate (Monte Carlo)")
+st.caption("Instead of one 'most likely' number plus a flat contingency, each uncertain input gets a range and the "
+           "estimate is recalculated thousands of times. P80 means 80% of simulated outcomes cost that much or less. "
+           "Contingency is not simulated: the results show how much contingency each confidence level needs.")
+
+ranges = mc.ranges_with_overrides(project.cost_uncertainty)
+labels = mc.range_labels()
+with st.expander("Uncertainty ranges (editable)", icon=":material/tune:"):
+    st.caption("Low and high are % changes from the most likely value (triangular distribution). Set both to 0 to "
+               "treat an input as certain. Saved with the project.")
+    table = pd.DataFrame([{"key": k, "input": labels[k],
+                           "type": "Quantity" if k in mc.QUANTITY_LABELS else "Assumption",
+                           "low_pct": lo, "high_pct": hi} for k, (lo, hi) in ranges.items()])
+    edited = st.data_editor(
+        table, hide_index=True, width="stretch", disabled=["key", "input", "type"],
+        column_order=["input", "type", "low_pct", "high_pct"], key=f"mc_ranges_{ss['pg_project_rev']}",
+        column_config={"input": "Input", "type": "Type",
+                       "low_pct": st.column_config.NumberColumn("Low (%)", min_value=-90.0, max_value=0.0, step=5.0),
+                       "high_pct": st.column_config.NumberColumn("High (%)", min_value=0.0, max_value=300.0, step=5.0)})
+    defaults = mc.default_ranges()
+    overrides = {r["key"]: [float(r["low_pct"]), float(r["high_pct"])] for _, r in edited.iterrows()
+                 if (float(r["low_pct"]), float(r["high_pct"])) != tuple(map(float, defaults[r["key"]]))}
+    if overrides != project.cost_uncertainty:
+        project.cost_uncertainty = overrides
+        ui.update_active_project(project)
+        st.rerun()
+    c1, c2 = st.columns(2)
+    runs = c1.select_slider("Number of simulations", [1000, 2000, 5000, 10000, 20000], value=5000)
+    seed = c2.number_input("Random seed", 0, 9999, 1, help="Same seed and inputs give identical results.")
+
+results = {rid_: mc.simulate(routes.set_index("route_id").loc[rid_], project.diameter_mm, assumptions, ranges,
+                             runs, seed)
+           for rid_ in estimates if rid_ != "REF"}
+budget_cad = project.budget / fx if project.budget else None
+st.plotly_chart(mc_chart({names[r]: res.samples["capex_base"].to_numpy() for r, res in results.items()},
+                         {names[r]: colors[r] for r in results}, cur, fx, project.budget or None), width="stretch")
+
+summary_mc = pd.DataFrame([{
+    "Route": names[r],
+    **{f"{row['level']} ({cur} M)": row["capex_base"] * fx / 1e6 for _, row in res.percentiles.iterrows()},
+    "Chance within budget": res.probability_within(budget_cad) if budget_cad else None,
+    f"Your {assumptions.contingency_pct:.0f}% contingency covers": res.confidence_of_assumed_contingency,
+} for r, res in results.items()])
+st.dataframe(summary_mc, hide_index=True, width="stretch", column_config={
+    **{c: st.column_config.NumberColumn(c, format="%.0f") for c in summary_mc.columns if "(" in c},
+    "Chance within budget": st.column_config.ProgressColumn("Chance within budget", min_value=0, max_value=1,
+                                                            format="percent"),
+    f"Your {assumptions.contingency_pct:.0f}% contingency covers": st.column_config.ProgressColumn(
+        f"Your {assumptions.contingency_pct:.0f}% contingency covers", min_value=0, max_value=1, format="percent",
+        help="Share of simulated outcomes at or below most-likely cost + your contingency."),
+})
+
+if rid in results:
+    res = results[rid]
+    p = res.percentiles.set_index("level")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric(f"P50 CAPEX ({cur})", millions(p.loc["P50", "capex_base"]))
+    m2.metric(f"P80 CAPEX ({cur})", millions(p.loc["P80", "capex_base"]))
+    m3.metric("Contingency needed for P80", f"{p.loc['P80', 'implied_contingency_pct']:.0f}%",
+              f"assumed {assumptions.contingency_pct:.0f}%", delta_color="off", delta_arrow="off")
+    m4.metric(f"Lifecycle PV at P80 ({cur})", millions(p.loc["P80", "lifecycle_pv_base"]))
+    coverage = res.confidence_of_assumed_contingency
+    st.info(f"For {names[rid]}: the most-likely estimate before contingency is {millions(res.most_likely_base)} {cur}. "
+            f"Your {assumptions.contingency_pct:.0f}% contingency covers about {coverage:.0%} of simulated outcomes "
+            f"(roughly P{coverage * 100:.0f}); reaching P80 needs about {p.loc['P80', 'implied_contingency_pct']:.0f}%.",
+            icon=":material/insights:")
+st.caption("Limits: inputs are drawn independently, which tends to understate the spread (in practice, labour and "
+           "material prices often move together); ranges are illustrative defaults; scope changes, schedule delays "
+           "and regulatory outcomes are not included. Lifecycle values here exclude contingency.")
 
 # --- Lifecycle over time -----------------------------------------------------------
 st.subheader("Cost over the design life")

@@ -62,7 +62,12 @@ taken = rr.accepted_keys(risks) | set(project.dismissed_risk_suggestions)
 suggestions = [s for s in rr.suggest_risks(
     a.routes, a.screening, a.design["strategy"], a.engagement, project.budget / max(ui.store.to_currency(1.0, project), 1e-9),
     dict(zip(a.routes["strategy"], a.routes["capex_cad"])),
-    a.sensitivity["assumption"].iloc[0] if not a.sensitivity.empty else None, a.plan.register) if s.key not in taken]
+    a.sensitivity["assumption"].iloc[0] if not a.sensitivity.empty else None, a.plan.register,
+    contingency_check=(a.assumptions.contingency_pct, float(
+        a.mc[a.design["route_id"]].percentiles.set_index("level").loc["P80", "implied_contingency_pct"]))
+    if a.design["route_id"] in a.mc else None,
+    budget_probability=a.mc[a.design["route_id"]].probability_within(project.budget / ui.store.to_currency(1.0, project))
+    if project.budget and a.design["route_id"] in a.mc else None) if s.key not in taken]
 
 with st.expander(f"Suggested risks to review ({len(suggestions)})", icon=":material/lightbulb:",
                  expanded=bool(suggestions) and risks.empty):

@@ -56,6 +56,7 @@ class Project:
     length_unit: str = "km"
     assumptions: list[dict] = field(default_factory=list)
     cost_assumptions: dict = field(default_factory=dict)  # only values changed from the defaults
+    cost_uncertainty: dict = field(default_factory=dict)  # Monte Carlo ranges changed from the defaults
     dismissed_risk_suggestions: list[str] = field(default_factory=list)  # suggestion keys the user set aside
     design_route_strategy: str = ""  # route option modelled in the twin/monitoring (user's choice)
     construction_progress: dict = field(default_factory=dict)  # section_id -> construction stage

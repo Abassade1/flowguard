@@ -84,7 +84,7 @@ st.markdown("\n".join(f"- {g}" for g in [
 st.divider()
 st.subheader("Download the report")
 report = build_report(project, routes, design["route_id"], a.estimates, assumption_table(a.assumptions),
-                      a.sensitivity, a.screening, a.plan.register, a.engagement, a.commitments, a.risks)
+                      a.sensitivity, a.screening, a.plan.register, a.engagement, a.commitments, a.risks, a.mc)
 slug = re.sub(r"[^a-z0-9]+", "_", project.name.lower()).strip("_") or "project"
 c1, c2 = st.columns(2)
 c1.download_button("Download PDF report", to_pdf(report), f"{slug}_report_{date.today():%Y%m%d}.pdf",

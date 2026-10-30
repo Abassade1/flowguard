@@ -90,10 +90,19 @@ Legend: [x] done · [ ] planned
 - [x] Restricted engagement records excluded from all reports (tested)
 - [x] Executive Overview: risk snapshot and links
 
-## Next ideas (beyond the original 7 phases)
+## Phase 8: Probabilistic costs ✅ (2026-10-30)
+- [x] Monte Carlo simulation (triangular ranges on cost assumptions and route quantities), vectorised on the
+      same formulas as the single estimate
+- [x] P10/P50/P80/P90 CAPEX and lifecycle PV, S-curves, chance of staying within budget
+- [x] Contingency needed for P50/P80/P90 vs the assumed contingency %
+- [x] Editable ranges saved with the project; results in investor reports; new risk suggestions
+      (contingency below P80 need, less than even chance within budget)
+- [ ] Later: correlated inputs (e.g. common market factor), schedule risk
+
+## Next ideas
 - [ ] Put the project under version control (git) and back up `data/`
 - [ ] Real open-data connectors (hydrography, roads, protected areas) instead of manual uploads
-- [ ] Probabilistic costs (P10/P50/P90) and schedule; stations from hydraulic calculations
+- [ ] Schedule model and stations from hydraulic calculations
 - [ ] User accounts and real access control before any multi-user or hosted deployment
 - [ ] Charts embedded in the PDF report (would need an image renderer, e.g. matplotlib)
 
@@ -108,4 +117,5 @@ Legend: [x] done · [ ] planned
 - Environmental screening thresholds are fixed in `EnvThresholds` (shown, not editable in the app).
 - Sensitivity labels are not security: anyone with access to this computer can read the database file.
 - Cost defaults are generic illustrative values, not benchmarks; energy, stations, financing and tax are excluded.
+- Monte Carlo inputs are independent, which tends to understate the spread of outcomes.
 - Facility positions (stations, valves) are indicative placements, not hydraulic or code-based design.

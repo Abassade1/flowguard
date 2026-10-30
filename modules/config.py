@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 APP_NAME = "FlowGuard"
 APP_TAGLINE = "Pipeline planning, investment decision-support and operational intelligence"
-APP_VERSION = "1.0.0 (Phases 1-7)"
+APP_VERSION = "1.1.0"
 
 DEFAULT_CURRENCY = "CAD"
 

@@ -24,6 +24,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, fields, replace
 
+import numpy as np
 import pandas as pd
 
 STEEL_DENSITY_T_PER_M3 = 7.85
@@ -150,77 +151,109 @@ def steel_tonnes_per_km(diameter_mm: float, wall_mm: float) -> float:
     return math.pi * (d - t) * t * 1000 * STEEL_DENSITY_T_PER_M3
 
 
-def annuity_factor(rate: float, years: float) -> float:
-    """Present value of 1 per year for `years` years at `rate` (0.06 = 6%)."""
-    return years if rate == 0 else (1 - (1 + rate) ** -years) / rate
+def annuity_factor(rate, years):
+    """Present value of 1 per year for `years` years at `rate` (0.06 = 6%). Works on arrays too."""
+    rate = np.asarray(rate, dtype=float)
+    safe = np.where(rate == 0, 1.0, rate)
+    out = np.where(rate == 0, years, (1 - (1 + safe) ** -np.asarray(years, dtype=float)) / safe)
+    return float(out) if out.ndim == 0 else out
+
+
+# Cost lines in report order: (group, item).
+LINE_ITEMS = [
+    ("Materials", "Line pipe steel"), ("Materials", "Coating & corrosion protection"),
+    ("Construction", "Mainline construction"),
+    ("Crossings & wet ground", "Water crossings"), ("Crossings & wet ground", "Wetland construction premium"),
+    ("Land, access & clearing", "Right-of-way land rights"), ("Land, access & clearing", "New access roads"),
+    ("Land, access & clearing", "Forest clearing"),
+    ("Engineering & environmental allowances", "Engineering & permitting"),
+    ("Engineering & environmental allowances", "Environmental mitigation allowance"),
+    ("Engineering & environmental allowances", "Restoration of disturbed wetland/forest"),
+    ("Contingency", "Contingency"),
+]
+
+
+def route_quantities(route: Mapping) -> dict:
+    """The measured route quantities the cost model uses."""
+    return {"length_km": float(route["length_km"]), "terrain_difficulty": float(route["terrain_difficulty"]),
+            "water_crossings": float(route["water_crossings"]), "wetland_km": float(route["wetland_km"]),
+            "forest_clearing_km": float(route["forest_clearing_km"]), "new_access_km": float(route["new_access_km"]),
+            "shared_corridor_km": float(route.get("shared_corridor_km", 0.0))}
+
+
+def cost_amounts(q: Mapping, diameter_mm: float, a) -> dict:
+    """The cost arithmetic, on its own.
+
+    `q` holds route quantities and `a` the assumptions (a CostAssumptions, or any object with the
+    same attribute names). Every value may be a number or a NumPy array of equal length, so the
+    same formulas serve both the single estimate and the Monte Carlo simulation.
+    """
+    L = q["length_km"]
+    inches = diameter_mm / MM_PER_INCH
+    item = {}
+    item["Line pipe steel"] = steel_tonnes_per_km(diameter_mm, a.wall_thickness_mm) * L * a.steel_price_cad_per_t
+    item["Coating & corrosion protection"] = L * 1000 * a.coating_cad_per_m
+    terrain_factor = 1 + a.terrain_multiplier_per_point * (q["terrain_difficulty"] - 1)
+    item["Mainline construction"] = inches * L * a.construction_cad_per_inch_km * terrain_factor
+    item["Water crossings"] = q["water_crossings"] * inches * a.water_crossing_cad_per_inch
+    item["Wetland construction premium"] = q["wetland_km"] * a.wetland_premium_cad_per_km
+    shared_share = np.where(np.asarray(L) > 0, np.minimum(q["shared_corridor_km"], L) / np.maximum(L, 1e-9), 0.0)
+    hectares = L * a.row_width_m / 10  # km × m → ha (1 km × 10 m = 1 ha)
+    item["Right-of-way land rights"] = (hectares * a.land_cost_cad_per_ha
+                                        * (1 - shared_share * a.shared_corridor_land_discount_pct / 100))
+    item["New access roads"] = q["new_access_km"] * a.access_road_cad_per_km
+    item["Forest clearing"] = q["forest_clearing_km"] * a.forest_clearing_cad_per_km
+    direct = sum(item.values())
+    item["Engineering & permitting"] = direct * a.engineering_permitting_pct / 100
+    item["Environmental mitigation allowance"] = direct * a.environmental_mitigation_pct / 100
+    item["Restoration of disturbed wetland/forest"] = ((q["wetland_km"] + q["forest_clearing_km"])
+                                                       * a.restoration_cad_per_km)
+    before_contingency = sum(item.values())
+    item["Contingency"] = before_contingency * a.contingency_pct / 100
+
+    capex = before_contingency + item["Contingency"]
+    opex = capex * a.om_pct_of_capex / 100 + L * a.integrity_cad_per_km_yr + a.energy_cad_per_yr
+    years, rate = a.design_life_years, np.asarray(a.discount_rate_pct) / 100
+    decom = capex * a.decommissioning_pct_of_capex / 100
+    return {"items": item, "before_contingency": before_contingency, "capex": capex, "opex": opex,
+            "lifecycle_nominal": capex + opex * years + decom,
+            "lifecycle_pv": capex + opex * annuity_factor(rate, years) + decom / (1 + rate) ** years}
 
 
 def estimate_route_cost(route: Mapping, diameter_mm: float, a: CostAssumptions) -> CostEstimate:
-    """Cost estimate for one route. `route` needs the measured attributes from routing."""
-    L = float(route["length_km"])
-    inches = diameter_mm / MM_PER_INCH
-    lines = []
-
-    def add(group, item, basis, amount):
-        lines.append({"group": group, "item": item, "basis": basis, "amount_cad": float(amount)})
-
-    tonnes = steel_tonnes_per_km(diameter_mm, a.wall_thickness_mm) * L
-    add("Materials", "Line pipe steel", f"{tonnes:,.0f} t × {a.steel_price_cad_per_t:,.0f} CAD/t",
-        tonnes * a.steel_price_cad_per_t)
-    add("Materials", "Coating & corrosion protection", f"{L:,.1f} km × {a.coating_cad_per_m:,.0f} CAD/m",
-        L * 1000 * a.coating_cad_per_m)
-
-    terrain_factor = 1 + a.terrain_multiplier_per_point * (float(route["terrain_difficulty"]) - 1)
-    add("Construction", "Mainline construction",
-        f"{inches:.0f} in × {L:,.1f} km × {a.construction_cad_per_inch_km:,.0f} × terrain factor {terrain_factor:.2f}",
-        inches * L * a.construction_cad_per_inch_km * terrain_factor)
-
-    crossings = int(route["water_crossings"])
-    add("Crossings & wet ground", "Water crossings",
-        f"{crossings} × {inches:.0f} in × {a.water_crossing_cad_per_inch:,.0f} CAD/in",
-        crossings * inches * a.water_crossing_cad_per_inch)
-    wet = float(route["wetland_km"])
-    add("Crossings & wet ground", "Wetland construction premium", f"{wet:,.1f} km × {a.wetland_premium_cad_per_km:,.0f}",
-        wet * a.wetland_premium_cad_per_km)
-
-    shared = min(float(route.get("shared_corridor_km", 0.0)), L)
-    hectares = L * a.row_width_m / 10  # km × m → ha (1 km × 10 m = 1 ha)
-    land = (hectares * a.land_cost_cad_per_ha
-            * (1 - (shared / L if L else 0) * a.shared_corridor_land_discount_pct / 100))
-    add("Land, access & clearing", "Right-of-way land rights",
-        f"{hectares:,.0f} ha × {a.land_cost_cad_per_ha:,.0f} CAD/ha ({shared:,.1f} km shared at "
-        f"−{a.shared_corridor_land_discount_pct:.0f}%)", land)
-    access = float(route["new_access_km"])
-    add("Land, access & clearing", "New access roads", f"{access:,.1f} km × {a.access_road_cad_per_km:,.0f}",
-        access * a.access_road_cad_per_km)
-    forest = float(route["forest_clearing_km"])
-    add("Land, access & clearing", "Forest clearing", f"{forest:,.1f} km × {a.forest_clearing_cad_per_km:,.0f}",
-        forest * a.forest_clearing_cad_per_km)
-
-    direct = sum(line["amount_cad"] for line in lines)
-    add("Engineering & environmental allowances", "Engineering & permitting",
-        f"{a.engineering_permitting_pct:.1f}% of direct cost", direct * a.engineering_permitting_pct / 100)
-    add("Engineering & environmental allowances", "Environmental mitigation allowance",
-        f"{a.environmental_mitigation_pct:.1f}% of direct cost", direct * a.environmental_mitigation_pct / 100)
-    add("Engineering & environmental allowances", "Restoration of disturbed wetland/forest",
-        f"{wet + forest:,.1f} km × {a.restoration_cad_per_km:,.0f}", (wet + forest) * a.restoration_cad_per_km)
-
-    before_contingency = sum(line["amount_cad"] for line in lines)
-    add("Contingency", "Contingency", f"{a.contingency_pct:.0f}% of direct + allowances",
-        before_contingency * a.contingency_pct / 100)
-
-    capex = sum(line["amount_cad"] for line in lines)
-    opex = capex * a.om_pct_of_capex / 100 + L * a.integrity_cad_per_km_yr + a.energy_cad_per_yr
-    years, rate = a.design_life_years, a.discount_rate_pct / 100
-    decom = capex * a.decommissioning_pct_of_capex / 100
-    nominal = capex + opex * years + decom
-    pv = capex + opex * annuity_factor(rate, years) + decom / (1 + rate) ** years
+    """Cost estimate for one route, with a readable basis for every line."""
+    q = route_quantities(route)
+    res = cost_amounts(q, diameter_mm, a)
+    L, inches = q["length_km"], diameter_mm / MM_PER_INCH
+    wet, forest = q["wetland_km"], q["forest_clearing_km"]
+    shared = min(q["shared_corridor_km"], L)
+    terrain_factor = 1 + a.terrain_multiplier_per_point * (q["terrain_difficulty"] - 1)
+    basis = {
+        "Line pipe steel": f"{steel_tonnes_per_km(diameter_mm, a.wall_thickness_mm) * L:,.0f} t × "
+                           f"{a.steel_price_cad_per_t:,.0f} CAD/t",
+        "Coating & corrosion protection": f"{L:,.1f} km × {a.coating_cad_per_m:,.0f} CAD/m",
+        "Mainline construction": f"{inches:.0f} in × {L:,.1f} km × {a.construction_cad_per_inch_km:,.0f} × "
+                                 f"terrain factor {terrain_factor:.2f}",
+        "Water crossings": f"{int(q['water_crossings'])} × {inches:.0f} in × {a.water_crossing_cad_per_inch:,.0f} CAD/in",
+        "Wetland construction premium": f"{wet:,.1f} km × {a.wetland_premium_cad_per_km:,.0f}",
+        "Right-of-way land rights": f"{L * a.row_width_m / 10:,.0f} ha × {a.land_cost_cad_per_ha:,.0f} CAD/ha "
+                                    f"({shared:,.1f} km shared at −{a.shared_corridor_land_discount_pct:.0f}%)",
+        "New access roads": f"{q['new_access_km']:,.1f} km × {a.access_road_cad_per_km:,.0f}",
+        "Forest clearing": f"{forest:,.1f} km × {a.forest_clearing_cad_per_km:,.0f}",
+        "Engineering & permitting": f"{a.engineering_permitting_pct:.1f}% of direct cost",
+        "Environmental mitigation allowance": f"{a.environmental_mitigation_pct:.1f}% of direct cost",
+        "Restoration of disturbed wetland/forest": f"{wet + forest:,.1f} km × {a.restoration_cad_per_km:,.0f}",
+        "Contingency": f"{a.contingency_pct:.0f}% of direct + allowances",
+    }
+    lines = pd.DataFrame([{"group": g, "item": i, "basis": basis[i], "amount_cad": float(res["items"][i])}
+                          for g, i in LINE_ITEMS])
 
     notes = ["Illustrative estimate based on editable default assumptions; not for investment decisions."]
     if a.energy_cad_per_yr == 0:
         notes.append("Pumping/compression energy is NOT included in OPEX (enter it from a hydraulic study).")
     notes.append("Excludes pump/compressor stations, terminals, financing costs, taxes and inflation.")
-    return CostEstimate(pd.DataFrame(lines), capex, opex, nominal, pv, L, notes)
+    return CostEstimate(lines, float(res["capex"]), float(res["opex"]), float(res["lifecycle_nominal"]),
+                        float(res["lifecycle_pv"]), L, notes)
 
 
 def add_costs(routes: pd.DataFrame, diameter_mm: float, a: CostAssumptions) -> pd.DataFrame:

@@ -80,7 +80,8 @@ def _sources(register: list[dict]) -> list[str]:
 
 def build_report(project: Project, routes: pd.DataFrame, design_route_id: str, estimates: dict,
                  cost_assumptions: pd.DataFrame, sensitivity: pd.DataFrame, screening: pd.DataFrame,
-                 register: list[dict], engagement: dict, commitments: pd.DataFrame, risks: pd.DataFrame) -> Report:
+                 register: list[dict], engagement: dict, commitments: pd.DataFrame, risks: pd.DataFrame,
+                 mc_results: dict | None = None) -> Report:
     cur, fx = project.currency, to_currency(1.0, project)
     names = routes.set_index("route_id")["name"].to_dict()
     layer_classes = _sources(register)
@@ -157,11 +158,29 @@ def build_report(project: Project, routes: pd.DataFrame, design_route_id: str, e
         tables.append(Table("sensitivity", "Most influential cost assumptions (CAPEX change for +/-25%)",
                             pd.DataFrame({"assumption": top["assumption"],
                                           f"swing_{cur}_M": top["swing"] * fx / 1e6}).assign(data_class="ASSUMPTION")))
+    mc_bullets = []
+    if mc_results:
+        rows = []
+        for rid, res in mc_results.items():
+            p = res.percentiles.set_index("level")["capex_base"]
+            rows.append({"route": names[rid], **{f"{lvl}_{cur}_M": v * fx / 1e6 for lvl, v in p.items()},
+                         "chance_within_budget": (f"{res.probability_within(project.budget / fx):.0%}"
+                                                  if project.budget else "-"),
+                         "assumed_contingency_covers": f"{res.confidence_of_assumed_contingency:.0%}"})
+        tables.append(Table("cost_probabilistic", f"Probabilistic CAPEX before contingency ({cur} millions, "
+                                                   "Monte Carlo)", pd.DataFrame(rows).assign(data_class="ESTIMATE")))
+        if design_route_id in mc_results:
+            res = mc_results[design_route_id]
+            need = res.percentiles.set_index("level").loc["P80", "implied_contingency_pct"]
+            mc_bullets.append(f"Monte Carlo ({len(res.samples):,} runs, illustrative ranges): for "
+                              f"{names[design_route_id]} the assumed {res.assumed_contingency_pct:.0f}% contingency covers "
+                              f"about {res.confidence_of_assumed_contingency:.0%} of outcomes; P80 needs about "
+                              f"{need:.0f}%. Inputs are drawn independently, which tends to understate the spread.")
     sections.append(Section(
         "4. Costs: CAPEX, OPEX and lifecycle", ["ESTIMATE", "ASSUMPTION"],
         [ESTIMATE_DISCLAIMER] + ([f"Converted from CAD at the team's rate 1 CAD = {project.fx_rate_from_cad} {cur}."]
                                  if cur != "CAD" else []),
-        bullets=design.notes[1:] if design is not None else [], tables=tables, chart=chart))
+        bullets=(design.notes[1:] if design is not None else []) + mc_bullets, tables=tables, chart=chart))
 
     # 5. Environmental ----------------------------------------------------------------------
     matrix = level_matrix(screening[screening["route_id"] != "REF"]).reset_index().rename(columns={"label": "theme"})

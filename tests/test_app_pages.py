@@ -91,6 +91,7 @@ def test_cost_assumption_edit_marks_project_unsaved():
     assert at.session_state["pg_active_project"]["cost_assumptions"] == {"steel_price_cad_per_t": 2500.0}
     at.radio[0].set_value("lifecycle_pv").run()  # sensitivity on lifecycle cost
     assert not at.exception
+    assert any("P80" in str(m.label) for m in at.metric)  # Monte Carlo section rendered
 
 
 def test_engagement_page_add_record_with_saved_project():

@@ -18,7 +18,7 @@ import streamlit as st
 from modules import projects as store
 from modules.anomaly_detection import Thresholds, detect_events, events_as_of
 from modules.ml_detection import MLSettings, run_ml
-from modules import risk_register
+from modules import cost_uncertainty, risk_register
 from modules.cost_engine import CostAssumptions, add_costs, estimate_route_cost, sensitivity
 from modules.route_engine import CRITERIA, score_routes
 from modules.elevation import elevation_for, get_dem, register_entry
@@ -367,6 +367,9 @@ def project_analysis(project: Project) -> SimpleNamespace:
         records=records, engagement=social_impact.summarise(records),
         commitments=social_impact.export_view(records[records["record_type"] == "commitment"]),
         risks=risk_register.list_risks(project.id),
+        mc={r["route_id"]: cost_uncertainty.simulate(r, project.diameter_mm, a,
+                                                      cost_uncertainty.ranges_with_overrides(project.cost_uncertainty))
+            for _, r in scored.iterrows() if r["route_id"] != "REF"},
     )
 
 

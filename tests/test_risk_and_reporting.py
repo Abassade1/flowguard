@@ -96,8 +96,11 @@ def test_report_sections_classes_and_exports(analysis, tmp_path):
     commitments = si.export_view(records[records["record_type"] == "commitment"])
     rr.add_risk(saved.id, {"title": "Wetland crossing delays", "category": "Environmental", "likelihood": 4,
                            "consequence": 3, "mitigation": "Winter construction"}, db)
+    from modules import cost_uncertainty as mc
+    mc_results = {rid: mc.simulate(r, p.diameter_mm, a, mc.default_ranges(), n=1000)
+                  for rid, r in scored.set_index("route_id").iterrows() if rid != "REF"}
     report = build_report(p, scored, "R1", est, assumption_table(a), sens, screening, register,
-                          si.summarise(records), commitments, rr.list_risks(saved.id, db))
+                          si.summarise(records), commitments, rr.list_risks(saved.id, db), mc_results)
     titles = [s.title for s in report.sections]
     assert len(titles) == 9 and titles[0].startswith("1. Status")
     for s in report.sections:
@@ -108,7 +111,8 @@ def test_report_sections_classes_and_exports(analysis, tmp_path):
     assert pdf[:4] == b"%PDF" and len(pdf) > 5000
     z = zipfile.ZipFile(io.BytesIO(to_csv_zip(report)))
     names = set(z.namelist())
-    assert {"README.txt", "routes.csv", "costs.csv", "risks.csv", "mitigation_commitments.csv"} <= names
+    assert {"README.txt", "routes.csv", "costs.csv", "cost_probabilistic.csv", "risks.csv",
+            "mitigation_commitments.csv"} <= names
     everything = "".join(z.read(n).decode() for n in names)
     assert "SECRET restricted promise" not in everything
     assert "Fund water monitoring" in everything

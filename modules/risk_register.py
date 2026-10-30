@@ -137,7 +137,9 @@ class Suggestion:
 
 def suggest_risks(routes: pd.DataFrame, screening: pd.DataFrame, design_strategy: str | None,
                   engagement_summary: dict, budget_cad: float, capex_cad_by_strategy: dict[str, float],
-                  top_cost_driver: str | None, data_register: list[dict]) -> list[Suggestion]:
+                  top_cost_driver: str | None, data_register: list[dict],
+                  contingency_check: tuple[float, float] | None = None,
+                  budget_probability: float | None = None) -> list[Suggestion]:
     """Risks visible in the project data. The modelled route gets route-specific suggestions."""
     out: list[Suggestion] = []
     names = routes.set_index("strategy")["name"].to_dict()
@@ -163,6 +165,18 @@ def suggest_risks(routes: pd.DataFrame, screening: pd.DataFrame, design_strategy
                 f"budget:{design_strategy}", f"Estimated CAPEX exceeds budget ({names[design_strategy]})",
                 "Cost & schedule", f"Illustrative CAPEX is {capex / budget_cad:.0%} of the proposed budget.",
                 design_strategy, "Cost Optimizer"))
+
+    if contingency_check and contingency_check[0] < contingency_check[1]:
+        assumed, needed = contingency_check
+        out.append(Suggestion(
+            "contingency:p80", "Contingency may be below P80 need", "Cost & schedule",
+            f"The assumed contingency is {assumed:.0f}%, but the Monte Carlo simulation suggests about {needed:.0f}% "
+            "is needed for 80% confidence on the modelled route.", design_strategy, "Cost Optimizer (Monte Carlo)"))
+    if budget_probability is not None and budget_probability < 0.5:
+        out.append(Suggestion(
+            "budget:probability", "Less than even chance of staying within budget", "Cost & schedule",
+            f"Simulated chance that CAPEX (before contingency) stays within the budget: {budget_probability:.0%}.",
+            design_strategy, "Cost Optimizer (Monte Carlo)"))
 
     if top_cost_driver:
         out.append(Suggestion(
