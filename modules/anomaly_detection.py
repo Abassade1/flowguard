@@ -67,6 +67,14 @@ def _escalate(base: str, excess_ratio: float) -> str:
     return levels[i]
 
 
+def _expected_temperature(sections: pd.DataFrame, nominal_temperature_c: float) -> pd.Series:
+    """Per-section expected temperature; the inlet (nominal) value if sections don't provide one."""
+    s = sections.set_index("section_id")
+    if "expected_temperature_c" in s:
+        return s["expected_temperature_c"]
+    return pd.Series(nominal_temperature_c, index=s.index)
+
+
 def detect_events(
     readings: pd.DataFrame, sections: pd.DataFrame, thresholds: Thresholds, nominal_temperature_c: float
 ) -> pd.DataFrame:
@@ -74,6 +82,7 @@ def detect_events(
     events: list[dict] = []
     last_ts = readings["timestamp"].max()
     expected = sections.set_index("section_id")["expected_pressure_kpa"]
+    expected_t = _expected_temperature(sections, nominal_temperature_c)
 
     for sid, df in readings.groupby("section_id", sort=True):
         df = df.sort_values("timestamp").reset_index(drop=True)
@@ -82,7 +91,8 @@ def detect_events(
         exp_p = float(expected[sid])
         p_dev_pct = 100 * (p - exp_p) / exp_p
         p_rate_pct = 100 * np.abs(np.diff(p, prepend=p[0])) / exp_p
-        t_dev = df["temperature_c"].to_numpy() - nominal_temperature_c
+        exp_t = float(expected_t[sid])
+        t_dev = df["temperature_c"].to_numpy() - exp_t
         imbalance = df["flow_imbalance_pct"].to_numpy()
         health = df["sensor_health"].to_numpy()
 
@@ -111,8 +121,8 @@ def detect_events(
                 ("Temperature deviation", "Process", "Temperature",
                  np.abs(t_dev) > thresholds.temperature_deviation_c, np.abs(t_dev),
                  thresholds.temperature_deviation_c, "Medium", 1,
-                 lambda peak, thr: f"Temperature was up to {peak:.1f} °C away from the nominal "
-                                   f"{nominal_temperature_c:.0f} °C (limit {thr:.0f} °C)."),
+                 lambda peak, thr: f"Temperature was up to {peak:.1f} °C away from the section's expected "
+                                   f"{exp_t:.0f} °C (limit {thr:.0f} °C)."),
                 ("Possible leak indicator", "Process", "Flow balance",
                  imbalance > thresholds.flow_imbalance_pct, imbalance,
                  thresholds.flow_imbalance_pct, "High", thresholds.flow_imbalance_min_readings,

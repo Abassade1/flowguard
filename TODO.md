@@ -107,12 +107,18 @@ Legend: [x] done · [ ] planned
 - [ ] Charts embedded in the PDF report (would need an image renderer, e.g. matplotlib)
 
 ## Known limitations
-- The simulation physics is deliberately simple (linear pressure loss, daily cycles, noise).
+- The simulation physics is deliberately simple (linear pressure loss restored at evenly spaced stations,
+  exponential cooling towards ground temperature, daily cycles, noise).
 - ML defaults were tuned on the same simulator they are evaluated on; results are optimistic.
-- Terrain is synthetic unless a DEM is uploaded; DEMs are resampled to ~250 m cells for the demo distance.
+- Terrain is synthetic unless a DEM is uploaded; DEMs are resampled to 500 cells along the study area's
+  longer side (~2.5 km cells for the ~1,130 km Fort McMurray–Kitimat demo).
 - Synthetic layers are drawn over a real basemap; they are labelled and dashed but do not match the
   real landscape shown underneath.
-- Corridors are screening-level (grid of ~0.8 km cells for the demo distance), not engineering alignments.
+- Corridors are screening-level (240 cells along the longer side: ~5 km cells for the demo), not engineering
+  alignments.
+- Each project uses one UTM zone (chosen at the corridor midpoint); on very long east–west corridors such as
+  the demo, distances near the ends are overstated by up to about 1%.
+- The demo's synthetic terrain does not show the Rocky or Coast Mountains; upload a DEM for real elevations.
 - Strategy weights are fixed in `modules/routing.py` (not yet editable in the app).
 - Environmental screening thresholds are fixed in `EnvThresholds` (shown, not editable in the app).
 - Sensitivity labels are not security: anyone with access to this computer can read the database file.

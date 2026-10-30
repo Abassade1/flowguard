@@ -29,7 +29,10 @@ def make_geotiff(lon0, lat0, lon1, lat1, res=0.01, nodata_box=None) -> bytes:
 @pytest.fixture
 def project_and_frame(tmp_path):
     db = tmp_path / "t.db"
-    project = save_project(load_sample_project(), db)
+    # A ~130 km corridor inside the generated GeoTIFFs (independent of where the demo project is).
+    project = load_sample_project()
+    project.start_lat, project.start_lon, project.end_lat, project.end_lon = 53.20, -112.90, 52.55, -111.40
+    project = save_project(project, db)
     return project, corridor_frame(project), db, tmp_path / "dem"
 
 

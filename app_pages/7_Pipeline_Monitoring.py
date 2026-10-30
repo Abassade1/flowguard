@@ -175,7 +175,8 @@ def live_panel() -> None:
         st.plotly_chart(
             section_detail_chart(
                 sec.reset_index(), events[events["section_id"] == sid], exp_p, thr.pressure_high_pct,
-                thr.pressure_low_pct, config.profile.nominal_temperature_c, thr.temperature_deviation_c, unit, now,
+                thr.pressure_low_pct, float(sections.set_index("section_id").loc[sid, "expected_temperature_c"]),
+                thr.temperature_deviation_c, unit, now,
             ),
             width="stretch", key="detail",
         )

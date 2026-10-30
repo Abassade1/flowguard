@@ -16,6 +16,24 @@ def test_sections_cover_whole_pipeline():
     assert sections["expected_pressure_kpa"].is_monotonic_decreasing
 
 
+@pytest.mark.parametrize("pipeline_type", ["Oil", "Natural gas", "Water"])
+def test_long_pipeline_stays_physical_and_quiet(pipeline_type):
+    # ~1,200 km (e.g. Fort McMurray to Kitimat): stations restore pressure, the product cools towards ground
+    # temperature, and normal operation raises no rule events.
+    from modules.anomaly_detection import Thresholds, detect_events
+
+    config = SimulationConfig(pipeline_length_km=1200, n_sections=16, pipeline_type=pipeline_type,
+                              scenario="Normal operations")
+    sections = build_sections(config)
+    profile = config.profile
+    assert (sections["expected_pressure_kpa"] > 0.5 * profile.nominal_pressure_kpa).all()
+    assert sections["expected_temperature_c"].between(profile.ground_temperature_c,
+                                                      profile.nominal_temperature_c).all()
+    assert sections["expected_temperature_c"].is_monotonic_decreasing
+    readings = simulate_readings(config)
+    assert detect_events(readings, sections, Thresholds(), profile.nominal_temperature_c).empty
+
+
 def test_shape_and_reproducibility():
     config = SimulationConfig(duration_hours=24, n_sections=6)
     a, b = simulate_readings(config), simulate_readings(config)

@@ -86,6 +86,17 @@ def section_id(number: int) -> str:
     return f"S{number:02d}"
 
 
+def expected_pressure_kpa(profile, km):
+    """Linear friction loss, restored to the inlet pressure at each pump/compressor station."""
+    return profile.nominal_pressure_kpa - profile.pressure_drop_per_km * (np.asarray(km) % profile.station_spacing_km)
+
+
+def expected_temperature_c(profile, km):
+    """Cooling towards ground temperature (about 0.03 °C/km at first, levelling off on long lines)."""
+    gap = profile.nominal_temperature_c - profile.ground_temperature_c
+    return profile.ground_temperature_c + gap * np.exp(-0.03 * np.asarray(km) / gap)
+
+
 def build_sections(config: SimulationConfig) -> pd.DataFrame:
     """Split the pipeline into equal-length sections, each with one sensor station."""
     edges = np.linspace(0.0, config.pipeline_length_km, config.n_sections + 1)
@@ -98,8 +109,9 @@ def build_sections(config: SimulationConfig) -> pd.DataFrame:
             "start_km": edges[:-1],
             "end_km": edges[1:],
             "sensor_km": mid,
-            # The pressure we expect at this sensor under normal conditions.
-            "expected_pressure_kpa": profile.nominal_pressure_kpa - profile.pressure_drop_per_km * mid,
+            # The pressure and temperature we expect at this sensor under normal conditions.
+            "expected_pressure_kpa": expected_pressure_kpa(profile, mid),
+            "expected_temperature_c": expected_temperature_c(profile, mid),
         }
     )
 
@@ -130,7 +142,7 @@ def simulate_readings(config: SimulationConfig) -> pd.DataFrame:
     h = hours[:, None]  # shape (time, 1) so it broadcasts across sections
     daily = np.sin(2 * np.pi * (h - 6) / 24.0)  # demand peaks mid-afternoon
     expected_p = sections["expected_pressure_kpa"].to_numpy()[None, :]
-    sensor_km = sections["sensor_km"].to_numpy()[None, :]
+    expected_t = sections["expected_temperature_c"].to_numpy()[None, :]
 
     # --- Flow: the same physical flow passes through every section; each section
     # has an inlet and an outlet meter with independent measurement noise.
@@ -141,7 +153,7 @@ def simulate_readings(config: SimulationConfig) -> pd.DataFrame:
     pressure = expected_p * (1 + 0.01 * daily)
 
     # --- Temperature: daily swing and slow cooling along the line.
-    temperature = profile.nominal_temperature_c + 2.0 * daily - 0.03 * sensor_km
+    temperature = expected_t + 2.0 * daily
     temperature = temperature * np.ones((n_t, n_s))
 
     # --- Sensor health (0-100): a slow random walk in the 93-100 range.

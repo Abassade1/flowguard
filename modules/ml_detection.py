@@ -31,7 +31,7 @@ import pandas as pd
 from sklearn.covariance import EllipticEnvelope
 from sklearn.ensemble import IsolationForest
 
-from modules.anomaly_detection import EVENT_COLUMNS, _runs
+from modules.anomaly_detection import EVENT_COLUMNS, _expected_temperature, _runs
 
 ML_DETECTOR = "ML (experimental)"
 MODELS = {"robust_covariance": "Robust covariance (EllipticEnvelope)", "isolation_forest": "Isolation Forest"}
@@ -77,7 +77,8 @@ def build_features(readings: pd.DataFrame, sections: pd.DataFrame, nominal_tempe
     out["pressure_dev_pct"] = 100 * (readings["pressure_kpa"] - expected) / expected
     grouped = readings.groupby("section_id")["pressure_kpa"]
     out["pressure_rate_pct"] = 100 * grouped.diff().abs() / expected
-    out["temperature_dev_c"] = readings["temperature_c"] - nominal_temperature_c
+    out["temperature_dev_c"] = readings["temperature_c"] - readings["section_id"].map(
+        _expected_temperature(sections, nominal_temperature_c))
     out["flow_imbalance_pct"] = readings["flow_imbalance_pct"]
     out["sensor_health"] = readings["sensor_health"]
     # Backward-looking rolling standard deviation (uses only past readings).

@@ -27,7 +27,7 @@ import shapely
 from pyproj import Transformer
 from shapely.geometry import LineString
 
-from modules.config import STATUS_COLORS
+from modules.config import PIPELINE_PROFILES, STATUS_COLORS
 from modules.gis_layers import CATEGORIES, CorridorFrame
 from modules.maps import LAYER_STYLES
 
@@ -120,12 +120,17 @@ def build_scene(frame: CorridorFrame, routes: pd.DataFrame, geoms: dict[str, Lin
     sec["lat"], sec["lon"] = lat, lon
     scene.sections = sec
 
-    # Indicative facilities: a station at the start, a terminal at the end, block valves between sections.
+    # Indicative facilities: stations at the start and at the profile's spacing, a terminal at the end,
+    # block valves between sections.
     station = FACILITY_NAMES.get(pipeline_type, "Pump station")
-    for kind, name, km in ([("station", f"{station} (indicative)", 0.0)]
+    spacing = PIPELINE_PROFILES[pipeline_type].station_spacing_km if pipeline_type in PIPELINE_PROFILES else 0
+    end_km = float(sections["end_km"].iloc[-1])
+    station_kms = np.arange(0.0, end_km - 0.5 * spacing, spacing) if spacing else np.array([0.0])
+    for kind, name, km in ([("station", f"{station} {i} (indicative)" if len(station_kms) > 1
+                             else f"{station} (indicative)", float(km)) for i, km in enumerate(station_kms, 1)]
                            + [("valve", f"Block valve BV-{i} (indicative)", float(km))
                               for i, km in enumerate(sections["start_km"].iloc[1:], start=1)]
-                           + [("terminal", "Delivery terminal (indicative)", float(sections["end_km"].iloc[-1]))]):
+                           + [("terminal", "Delivery terminal (indicative)", end_km)]):
         p = line.interpolate(min(km * scale * 1000, line.length))
         scene.facilities.append({"kind": kind, "name": name, "chainage_km": km,
                                  "x_km": (p.x - origin[0]) / 1000, "y_km": (p.y - origin[1]) / 1000,

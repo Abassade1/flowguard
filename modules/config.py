@@ -48,13 +48,15 @@ class PipelineProfile:
     pressure_drop_per_km: float  # simple linear friction loss
     nominal_flow: float
     flow_unit: str
-    nominal_temperature_c: float
+    nominal_temperature_c: float  # at the inlet station
+    station_spacing_km: float  # pump/compressor stations restore pressure at this interval
+    ground_temperature_c: float = 5.0  # the product cools towards this along the line
 
 
 PIPELINE_PROFILES: dict[str, PipelineProfile] = {
-    "Oil": PipelineProfile("Oil", 7000.0, 12.0, 1200.0, "m³/h", 35.0),
-    "Natural gas": PipelineProfile("Natural gas", 8500.0, 15.0, 250.0, "10³ m³/h", 15.0),
-    "Water": PipelineProfile("Water", 1200.0, 3.0, 2500.0, "m³/h", 10.0),
+    "Oil": PipelineProfile("Oil", 7000.0, 12.0, 1200.0, "m³/h", 35.0, 150.0),
+    "Natural gas": PipelineProfile("Natural gas", 8500.0, 15.0, 250.0, "10³ m³/h", 15.0, 120.0),
+    "Water": PipelineProfile("Water", 1200.0, 3.0, 2500.0, "m³/h", 10.0, 100.0),
 }
 
 

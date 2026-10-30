@@ -9,7 +9,8 @@ from modules.projects import Project, validate_project
 def test_sample_project_is_valid():
     p = store.load_sample_project()
     assert validate_project(p) == []
-    assert 100 < p.straight_line_km < 150
+    assert 1100 < p.straight_line_km < 1160  # Fort McMurray, AB to Kitimat, BC
+    assert "(synthetic)" in p.name
 
 
 def test_validation_catches_problems():

@@ -76,6 +76,15 @@ On both, the SQLite database is temporary: projects saved online are lost when t
 leak, pressure surge, sensor fault, temperature excursion), the affected section, the onset time and
 the severity. Advanced settings: length, number of sections, time window, noise, random seed.
 
+### Demo project
+
+The built-in demo is a **crude oil export line from Fort McMurray, Alberta to the port of Kitimat, British Columbia**
+(about 1,130 km straight line; 914 mm / 36 in; illustrative CAD 5.5 B budget). Only the two end points are real
+places. All constraint layers and terrain between them are **synthetic** (the Rocky and Coast Mountains are not
+represented), and it is not a real or proposed pipeline. Any real project in this region would require
+engagement with affected First Nations, Métis and other communities, which the demo does not represent. The
+simulator places indicative pump stations every 150 km so pressures stay realistic on a line this long.
+
 ### Try this
 
 1. Open **Project Setup**, click **Load demo**, click the map to move the start point, then **Save project**.
